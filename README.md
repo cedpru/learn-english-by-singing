@@ -239,7 +239,8 @@ src/              version web React (héritée, toujours fonctionnelle)
 
 Fenêtre claire en `flat design` : fond lavande, panneaux blancs à grands rayons, un seul carton
 sombre (la radio), accent bleu et violet, aucune ombre ni dégradé. La barre latérale porte les
-sources, la colonne de droite la pochette, la position (anneau) et l'état du direct, le centre lesparoles. Palette dans [`desktop/lib/ui/theme.dart`](desktop/lib/ui/theme.dart).
+sources, la colonne de droite la pochette, la position (anneau) et l'état du direct, le centre les
+paroles. Palette dans [`desktop/lib/ui/theme.dart`](desktop/lib/ui/theme.dart).
 
 ## Captures
 
