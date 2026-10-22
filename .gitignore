@@ -1,0 +1,27 @@
+# Dépendances
+node_modules/
+
+# Build web (Vite)
+dist/
+
+# Données locales : modèle de traduction (~120 Mo) et cache de traductions
+data/
+.env
+.env.*
+
+# Logs
+*.log
+
+# Application desktop Flutter
+desktop/build/
+desktop/.dart_tool/
+desktop/windows/flutter/ephemeral/
+
+# Captures de test locales — seules celles de docs/ sont versionnées
+screenshots/
+.tmp/
+
+# Outils et système
+.freebuff/
+.DS_Store
+Thumbs.db

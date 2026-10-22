@@ -1,0 +1,38 @@
+{
+  "name": "sing-along",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Écoute la radio (ou n'importe quelle source), reconnaît le morceau et affiche les paroles synchronisées en anglais avec la traduction française.",
+  "scripts": {
+    "dev": "concurrently -n server,web -c cyan,magenta \"npm:dev:server\" \"npm:dev:web\"",
+    "dev:server": "tsx watch server/index.ts",
+    "dev:web": "vite",
+    "build": "tsc --noEmit && vite build",
+    "typecheck": "tsc --noEmit",
+    "start": "tsx server/index.ts",
+    "desktop": "cd desktop && flutter run -d windows",
+    "desktop:build": "cd desktop && flutter build windows --release"
+  },
+  "dependencies": {
+    "@ffmpeg-installer/ffmpeg": "^1.1.0",
+    "@huggingface/transformers": "^4.3.1",
+    "cors": "^2.8.5",
+    "express": "^4.21.2",
+    "node-shazam": "^1.2.7",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.19",
+    "@types/express": "^4.17.23",
+    "@types/node": "^24.3.0",
+    "@types/react": "^19.1.10",
+    "@types/react-dom": "^19.1.7",
+    "@vitejs/plugin-react": "^5.0.0",
+    "concurrently": "^9.2.0",
+    "tsx": "^4.20.4",
+    "typescript": "^5.9.2",
+    "vite": "^7.1.2"
+  }
+}
