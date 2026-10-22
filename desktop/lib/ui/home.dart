@@ -341,7 +341,7 @@ class RadioHome extends StatelessWidget {
             const SizedBox(height: 12),
             Text(c.radioError!, style: text(12, color: Palette.coralInk)),
           ],
-          if (c.radioStationOnly && c.current == null) ...[
+          if (c.radioSongUnannounced && c.current == null) ...[
             const SizedBox(height: 14),
             _IdentifyNotice(controller: c),
           ],
@@ -450,8 +450,8 @@ class _IdentifyNotice extends StatelessWidget {
         : c.identifyGaveUp
         ? (
             Palette.amber,
-            'Le morceau n’a pas pu être reconnu à l’écoute. Saisis-le ci-dessous : '
-                'les paroles se lanceront dessus.',
+            'Le morceau n’a pas pu être reconnu à l’écoute. L’app réessaiera dans un moment ; '
+                'tu peux aussi saisir le titre ci-dessous pour lancer les paroles tout de suite.',
           )
         : (
             Palette.lavender,

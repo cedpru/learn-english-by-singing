@@ -76,13 +76,18 @@ class AppController extends ChangeNotifier {
   Timer? _poll;
   String _lastRadioKey = '';
 
-  /// Some stations publish only their own name ("DANCEBOX") instead of the
-  /// artist and title. Without those two the lyrics cannot start, so the app
-  /// listens to the stream itself and asks Shazam who is playing.
+  /// Some stations publish only their own name ("DANCEBOX") or nothing at all
+  /// instead of the artist and title. Without those two the lyrics cannot
+  /// start, so the app listens to the stream itself and asks Shazam who is
+  /// playing — and listens again when that song is over, because no
+  /// announcement will ever tell us the next one.
   bool identifying = false;
-  int _identifyAt = 0;
+  int _nextIdentifyAt = 0;
   int _identifyTries = 0;
+  int _identifyRound = 0;
   static const _maxIdentifyTries = 3;
+  /// seconds between two rounds of misses: never hammer Shazam on a DJ set
+  static const _identifyBackoff = <int>[60, 180, 300];
   int _radioLoadFails = 0;
 
   // -------------------------------------------------------------------- mic
@@ -103,15 +108,23 @@ class AppController extends ChangeNotifier {
       (session?.title ?? '').isNotEmpty &&
       (session?.artist ?? '').isEmpty;
 
+  /// Live stream whose metadata never name the song — only the station name,
+  /// or nothing at all. Nothing on this stream will ever change the displayed
+  /// title, so the song has to come from listening to the audio.
+  bool get radioSongUnannounced =>
+      session?.status == 'live' &&
+      ((session?.title ?? '').isEmpty || (session?.artist ?? '').isEmpty);
+
   /// The user has to type the song for the lyrics to appear.
   bool get radioNeedsManual =>
       session != null &&
       (session!.status == 'no-metadata' ||
           session!.status == 'error' ||
-          radioStationOnly);
+          radioSongUnannounced);
 
-  bool get identifyGaveUp =>
-      radioStationOnly && _identifyTries >= _maxIdentifyTries;
+  /// A whole round of attempts heard nothing recognisable (DJ set, rare mix).
+  /// Not final: the app waits, then tries again — a later song may match.
+  bool identifyGaveUp = false;
   bool get playingAudio => audio.playing.value;
 
   Future<void> _loadPresets() async {
@@ -229,6 +242,7 @@ class AppController extends ChangeNotifier {
         }
       }
       _scheduleSync(id);
+      _scheduleNextIdentify(data.track.duration ?? track.duration, startAt);
     } catch (err) {
       if (id != _requestId) return;
       error = err is ApiException ? err.message : err.toString();
@@ -245,6 +259,23 @@ class AppController extends ChangeNotifier {
     final track = current?.track;
     if (track == null) return;
     await load(track, clockPosition);
+  }
+
+  /// On a stream that never announces its songs, the title can only change by
+  /// listening again. Schedule that for the end of the song on screen: its
+  /// length when known, four minutes when not (the app would otherwise stay
+  /// frozen on the first song of the session, however long the radio plays).
+  void _scheduleNextIdentify(double? duration, double startAt) {
+    if (!radioSongUnannounced) {
+      _nextIdentifyAt = 0;
+      return;
+    }
+    _identifyTries = 0;
+    identifyGaveUp = false;
+    final total = duration != null && duration > 30 ? duration : 240.0;
+    final remaining = math.max(20.0, total - startAt) + 15;
+    _nextIdentifyAt =
+        DateTime.now().millisecondsSinceEpoch + (remaining * 1000).round();
   }
 
   /// Captures a few seconds of the live stream so Shazam can tell us where the
@@ -373,7 +404,9 @@ class AppController extends ChangeNotifier {
       _lastRadioKey = '';
       _syncedKey = '';
       _identifyTries = 0;
-      _identifyAt = 0;
+      _identifyRound = 0;
+      identifyGaveUp = false;
+      _nextIdentifyAt = 0;
       _radioLoadFails = 0;
       await audio.open(url);
       _startPolling(created.id);
@@ -396,9 +429,9 @@ class AppController extends ChangeNotifier {
         final artist = next.artist;
         final title = next.title;
         if (artist == null || title == null) {
-          if (next.status == 'live' && current == null) {
-            unawaited(_identifyStation(id));
-          }
+          // This station names nothing: keep listening to the stream itself,
+          // first to name the current song, then each following one.
+          if (next.status == 'live') unawaited(_identifyStation(id));
           return;
         }
         final key = '$artist|$title';
@@ -432,20 +465,40 @@ class AppController extends ChangeNotifier {
   }
 
   /// Station that never says what it plays: capture the live stream and let
-  /// Shazam name the song, so the lyrics start on their own.
+  /// Shazam name the song, so the lyrics start on their own — then do it again
+  /// for the next song, since the metadata will never announce it.
   Future<void> _identifyStation(String id) async {
-    if (identifying || _identifyTries >= _maxIdentifyTries) return;
+    if (identifying) return;
     final now = DateTime.now().millisecondsSinceEpoch;
-    if (now - _identifyAt < 12000) return;
-    _identifyAt = now;
+    if (_nextIdentifyAt != 0 && now < _nextIdentifyAt) return;
+    if (_identifyTries >= _maxIdentifyTries) {
+      // a full round heard nothing usable: back off instead of hammering the
+      // Shazam API, then start a fresh round
+      _identifyTries = 0;
+      identifyGaveUp = true;
+      final round = math.min(_identifyRound, _identifyBackoff.length - 1);
+      _nextIdentifyAt = now + _identifyBackoff[round] * 1000;
+      _identifyRound += 1;
+      notifyListeners();
+      return;
+    }
+    _nextIdentifyAt = now + 12000;
     _identifyTries += 1;
     identifying = true;
     notifyListeners();
     try {
       final result = await api.syncRadio(id);
-      if (session?.id != id || current != null) return;
+      if (session?.id != id) return;
       final heard = result.track;
       if (result.status != 'matched' || heard == null) return;
+      final shown = current?.track;
+      if (shown != null && sameSong(heard, shown)) {
+        // still the song on screen: we listened too early, come back later
+        _identifyTries = 0;
+        identifyGaveUp = false;
+        _nextIdentifyAt = DateTime.now().millisecondsSinceEpoch + 45000;
+        return;
+      }
       final latency = audio.bufferedAheadSeconds();
       final position = math.max(
         0.0,
@@ -453,10 +506,13 @@ class AppController extends ChangeNotifier {
             (DateTime.now().millisecondsSinceEpoch - result.capturedAt) / 1000 -
             latency,
       );
+      _identifyTries = 0;
+      _identifyRound = 0;
+      identifyGaveUp = false;
       _lastRadioKey = 'shazam|${heard.artist}|${heard.title}';
       await load(heard, position);
     } catch (_) {
-      // no match (or Shazam down): the manual form stays available
+      // no match (or Shazam down): the next round will try again
     } finally {
       identifying = false;
       notifyListeners();
@@ -473,6 +529,9 @@ class AppController extends ChangeNotifier {
     _lastRadioKey = '';
     _syncedKey = '';
     _identifyTries = 0;
+    _identifyRound = 0;
+    identifyGaveUp = false;
+    _nextIdentifyAt = 0;
     identifying = false;
     await audio.stop();
     notifyListeners();

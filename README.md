@@ -102,6 +102,14 @@ radio ──► ICY StreamTitle ────────────────
   manuelle en parallèle — elle reste le seul recours quand la reconnaissance échoue (DJ set,
   morceau rare).
 
+  Sur ces stations, aucune annonce ne viendra jamais changer le titre : l'app réécoute donc le
+  direct à la **fin de chaque morceau identifié** (à sa durée quand elle est connue, sinon au bout
+  de quatre minutes) et enchaîne sur le suivant toute seule. Une reconnaissance qui retombe sur le
+  morceau déjà affiché veut dire qu'on a écouté trop tôt : elle réessaie 45 s plus tard. Après trois
+  échecs d'affilée, elle laisse Shazam tranquille 1, 3 puis 5 minutes avant de repartir — une
+  station qu'on n'arrive pas à identifier ne doit pas devenir un robinet à requêtes. Sans ça, le
+  morceau affiché restait celui du début de la session, indéfiniment.
+
 ### Lecture
 
 Dans l'app desktop (Flutter), la radio est jouée par le moteur audio local (`media_kit` / mpv) et
@@ -200,6 +208,11 @@ durées différentes : la liste n'en montre qu'un, choisi pour ressembler à la 
   échoue aussi régulièrement sur un mix continu : un flux dancefloor de test (×3 essais) n'a jamais
   été reconnu et il a fallu saisir le titre à la main. Certaines stations (KEXP) annoncent le nom de
   l'émission ; là, la saisie manuelle reste la seule voie.
+- Sur une station qui n'annonce rien, l'enchaînement suit ce que l'app **entend**, pas ce qu'elle
+  sait : pendant les 8 s d'écoute le morceau précédent reste affiché (badge « écoute du direct… »),
+  et un morceau non identifiable laisse le précédent en place jusqu'à l'essai suivant. Un morceau
+  plus long que sa durée LRCLIB (version live, extended) est reconnu comme le même et n'est
+  rechargé qu'à la fin réelle.
 - Le recalage automatique en radio coûte ~9 s (8 s d'écoute + reconnaissance) et une requête Shazam
   par morceau ; c'est une API non officielle, donc à ménager.
 - Le mode micro exige un périphérique d'entrée. Sur le poste de test Windows il n'y en a **aucun** :

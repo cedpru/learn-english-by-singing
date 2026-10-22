@@ -103,6 +103,8 @@ class _KaraokePageState extends State<KaraokePage> {
       children: [
         if (payload.synced) const Tag('synchronisé', tone: ChipTone.ok),
         if (c.autoSynced) const Tag("calé sur l'audio", tone: ChipTone.info),
+        // station that names nothing: the next song is being identified
+        if (c.identifying) const Tag('écoute du direct…', tone: ChipTone.info),
         if (payload.provider == 'manuel')
           const Tag('paroles maison', tone: ChipTone.neutral),
         if (payload.translation == 'ok')
