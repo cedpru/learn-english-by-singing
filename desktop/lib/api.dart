@@ -29,10 +29,7 @@ class Api {
       throw ApiException('réponse illisible (${res.statusCode})');
     }
     if (res.statusCode >= 400) {
-      final message = body is Map && body['error'] is String
-          ? body['error'] as String
-          : 'erreur HTTP ${res.statusCode}';
-      throw ApiException(message);
+      throw ApiException(_errorMessage(body, res.statusCode));
     }
     if (body is! Map<String, dynamic>) throw ApiException('réponse inattendue');
     return body;
@@ -49,8 +46,18 @@ class Api {
     }
   }
 
+  /// NestJS answers `{ statusCode, message, errorCode, path, timestamp }`.
+  String _errorMessage(dynamic body, int status) {
+    if (body is Map) {
+      final value = body['message'] ?? body['error'];
+      if (value is String && value.isNotEmpty) return value;
+      if (value is List && value.isNotEmpty) return value.join(', ');
+    }
+    return 'erreur HTTP $status';
+  }
+
   Future<List<Preset>> presets() async {
-    final res = await http.get(_uri('/api/presets'));
+    final res = await http.get(_uri('/api/radio/presets'));
     final body = jsonDecode(utf8.decode(res.bodyBytes));
     if (body is! List) throw ApiException('presets indisponibles');
     return body
@@ -66,14 +73,12 @@ class Api {
           body: clip,
         )
         .timeout(const Duration(seconds: 90));
-    final body = _decode(res);
-    if (body['error'] is String) throw ApiException(body['error'] as String);
-    return Recognition.fromJson(body);
+    return Recognition.fromJson(_decode(res));
   }
 
   Future<KaraokePayload> karaoke(SongRef track, {String? rawLyrics}) async {
     final res = await http.post(
-      _uri('/api/karaoke'),
+      _uri('/api/lyrics/karaoke'),
       headers: {'Content-Type': 'application/json'},
       body: jsonEncode({
         'track': track.toJson(),
@@ -85,7 +90,7 @@ class Api {
 
   Future<List<SearchResult>> search(String query) async {
     final res = await http.get(
-      _uri('/api/search?q=${Uri.encodeQueryComponent(query)}'),
+      _uri('/api/lyrics/search?q=${Uri.encodeQueryComponent(query)}'),
     );
     final body = jsonDecode(utf8.decode(res.bodyBytes));
     if (body is! List) throw ApiException('recherche indisponible');

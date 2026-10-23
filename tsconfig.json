@@ -15,5 +15,6 @@
     "verbatimModuleSyntax": true,
     "types": ["node"]
   },
-  "include": ["src", "server", "vite.config.ts"]
+  "include": ["src", "vite.config.ts"],
+  "exclude": ["server", "node_modules", "dist"]
 }

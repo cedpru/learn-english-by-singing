@@ -26,23 +26,23 @@ ne trouvera pas la commande.
 git clone https://github.com/cedpru/learn-english-by-singing
 cd learn-english-by-singing
 
-npm install                       # dépendances du serveur (express, shazam, transformers…)
+npm install                       # dépendances du serveur (NestJS, shazam, transformers…)
+npm run build:server              # compile l'API NestJS dans server/dist
 cd desktop
 flutter pub get
 flutter run -d windows            # ouvre la fenêtre, le serveur démarre tout seul
 ```
 
-Build d'un exécutable :
+`npm run desktop` enchaîne les deux (`build:server` puis `flutter run`). Build d'un exécutable :
 
 ```bash
-cd desktop
-flutter build windows --release
-./build/windows/x64/runner/Release/sing_along.exe
+npm run desktop:build             # compile l'API + l'exécutable Windows
+./desktop/build/windows/x64/runner/Release/sing_along.exe
 ```
 
 L'app **démarre le serveur elle-même** : elle le cherche en remontant depuis l'exécutable (ou via
-`SINGALONG_ROOT=/chemin/du/projet`), lance `node` sur `server/index.ts` avec `tsx`, attend
-`/api/health` puis affiche la fenêtre. Le serveur reçoit le PID de la fenêtre et s'arrête avec elle :
+`SINGALONG_ROOT=/chemin/du/projet`), lance le serveur Nest compilé (`node server/index.js`, qui
+charge `server/dist/main.js`), attend `/api/health` puis affiche la fenêtre. Le serveur reçoit le PID de la fenêtre et s'arrête avec elle :
 plus de `node` orphelin qui garde le port 8787. Un serveur déjà lancé (`npm run dev`) est réutilisé.
 
 Un raccourci **Sing Along** (Bureau + menu Démarrer) pointe sur le build release : double-clic, la
@@ -57,10 +57,11 @@ npm install
 npm run dev          # API sur :8787 + interface sur http://127.0.0.1:5173
 ```
 
-Production locale :
+Swagger : http://127.0.0.1:8787/api/docs. Production locale :
 
 ```bash
-npm run build
+npm run build        # interface web (Vite)
+npm run build:server # API NestJS
 npm start            # sert l'interface compilée et l'API sur http://127.0.0.1:8787
 ```
 
@@ -74,7 +75,7 @@ micro ──► POST /api/recognize ──► Shazam (sans clé) ──► { art
                                                         │
 radio ──► ICY StreamTitle ──────────────────────────────┤
                                                         ▼
-                                        POST /api/karaoke
+                                        POST /api/lyrics/karaoke
                                           ├─ LRCLIB     → LRC synchronisé (+ <mot> si dispo)
                                           ├─ texte collé → LRC ou texte simple (paroles maison)
                                           └─ OPUS-MT    → traduction EN→FR (cache disque)
@@ -152,7 +153,7 @@ LRCLIB ne couvre pas tout (sorties récentes, groupes coréens ou japonais, rare
    même la scène, paroles vides, pour les saisir à la main.
 2. **Coller** — `✎ paroles` ouvre un éditeur : colle le texte (une ligne par phrase) ou un LRC
    complet pour garder les timings. C'est enregistré sur l'appareil, par titre, et renvoyé à
-   `/api/karaoke` à chaque chargement (`rawLyrics`), avec la traduction habituelle. L'app desktop
+   `/api/lyrics/karaoke` à chaque chargement (`rawLyrics`), avec la traduction habituelle. L'app desktop
    ne propose pas (encore) l'import de fichier `.lrc` : il suffit d'ouvrir le fichier dans un éditeur
    et de coller son contenu.
 
@@ -226,16 +227,20 @@ durées différentes : la liste n'en montre qu'un, choisi pour ressembler à la 
 ## Structure
 
 ```
-server/
-  index.ts        API Express (recognize, karaoke, search, radio) + veille du PID parent
-  shazam.ts       reconnaissance + offset du clip (appels sérialisés)
-  lyrics.ts       LRCLIB, parseur LRC, sélection du meilleur résultat
-  translate.ts    OPUS-MT local + détection de langue + cache disque
-  icy.ts          lecture des métadonnées ICY des flux radio
-  presets.ts      stations avec métadonnées
+server/           API NestJS (CommonJS, compilée dans server/dist)
+  src/main.ts           bootstrap : helmet, CORS, préfixe /api, Swagger, PID parent
+  src/app.module.ts     modules + rate limiting
+  src/common/           DTO validés, exceptions, filtre global, intercepteurs, middleware
+  src/recognition/      Shazam + ffmpeg (offset du clip, appels sérialisés)
+  src/lyrics/           LRCLIB, parseur LRC, meilleur résultat, traduction OPUS-MT
+  src/radio/            sessions ICY, presets, capture du direct pour le recalage
+  src/health/           health check (disque, mémoire)
+  src/types/            déclarations ambiantes (node-shazam)
+  test/                 tests e2e
+  index.js              point d'entrée utilisé par le lanceur desktop
 desktop/          application Windows Flutter (l'app principale)
   lib/main.dart           démarrage, écran d'attente du serveur
-  lib/server_launcher.dart  lance node/tsx, attend /api/health, tue le serveur à la fermeture
+  lib/server_launcher.dart  lance le serveur compilé, attend /api/health, l'arrête à la fermeture
   lib/app_controller.dart   horloge des paroles, radio, recalage Shazam, micro
   lib/api.dart            client HTTP du serveur local
   lib/audio_engine.dart   lecture du flux (media_kit) + capture micro (record)

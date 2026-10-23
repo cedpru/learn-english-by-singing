@@ -8,9 +8,27 @@ import type {
   StreamSync,
 } from './types';
 
+/** NestJS answers `{ statusCode, message, errorCode, path, timestamp }`. */
+function errorMessage(body: unknown, status: number): string {
+  if (body && typeof body === 'object') {
+    const { message, error } = body as { message?: unknown; error?: unknown };
+    if (typeof message === 'string' && message) return message;
+    if (Array.isArray(message) && message.length) return message.join(', ');
+    if (typeof error === 'string' && error) return error;
+  }
+  return `erreur HTTP ${status}`;
+}
+
 async function json<T>(res: Response): Promise<T> {
-  const body = (await res.json()) as T & { error?: string };
-  if (!res.ok) throw new Error(body?.error ?? `erreur HTTP ${res.status}`);
+  const text = await res.text();
+  let body: T | null = null;
+  try {
+    body = text ? (JSON.parse(text) as T) : null;
+  } catch {
+    // A dev server without the API proxy answers HTML.
+    if (res.ok) throw new Error('réponse illisible');
+  }
+  if (!res.ok) throw new Error(errorMessage(body, res.status));
   return body as T;
 }
 
@@ -24,7 +42,7 @@ export async function recognizeClip(blob: Blob): Promise<RecognitionResponse> {
 }
 
 export async function fetchKaraoke(track: SongRef, rawLyrics?: string | null): Promise<KaraokePayload> {
-  const res = await fetch('/api/karaoke', {
+  const res = await fetch('/api/lyrics/karaoke', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(rawLyrics ? { track, rawLyrics } : { track }),
@@ -33,12 +51,12 @@ export async function fetchKaraoke(track: SongRef, rawLyrics?: string | null): P
 }
 
 export async function searchSongs(q: string): Promise<SearchResult[]> {
-  const res = await fetch(`/api/search?q=${encodeURIComponent(q)}`);
+  const res = await fetch(`/api/lyrics/search?q=${encodeURIComponent(q)}`);
   return json<SearchResult[]>(res);
 }
 
 export async function fetchPresets(): Promise<Preset[]> {
-  return json<Preset[]>(await fetch('/api/presets'));
+  return json<Preset[]>(await fetch('/api/radio/presets'));
 }
 
 export async function startRadio(url: string, name?: string): Promise<RadioSession> {
